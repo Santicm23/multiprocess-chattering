@@ -163,16 +163,15 @@ void list(Request req) {
   char recibo[100];
   send_request(req);
   
-  int fdtemp = open(pipeUnit, O_RDONLY);
+  int fd_tmp = open(pipeUnit, O_RDONLY);
 
-
-  if (read(fdtemp, &recibo, sizeof(recibo)) == -1) {
+  if (read(fd_tmp, &recibo, sizeof(recibo)) == -1) {
     perror("Error lectura");
     exit(EXIT_FAILURE);
   }
 
   printf("Los usuarios conectados en el sistema son %s\n", recibo);
-  close(fdtemp);
+  close(fd_tmp);
 }
 
 void group(Request req) { send_request(req); }
@@ -223,5 +222,16 @@ Request create_req(int ID, char *str) {
 }
 
 void signalHandler() {
+  char recibo[150];
   
+  int fd_tmp = open(pipeUnit, O_RDONLY);
+
+  if (read(fd_tmp, &recibo, sizeof(recibo)) == -1) {
+    perror("Error lectura");
+    exit(EXIT_FAILURE);
+  }
+
+  close(fd_tmp);
+  
+  printf("\n--> %s\n", recibo);
 }
