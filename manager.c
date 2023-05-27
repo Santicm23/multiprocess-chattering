@@ -17,6 +17,8 @@
 
 void validate_args(int argc, char *argv[], int *N, char *pipeNom);
 void auth(Request req, Talker *talkers, int *c_talkers, int N);
+void list(Request req, Talker *talkers, int *c_talkers);
+void list_group(Request req, Group *groups, int *c_groups);
 
 int main(int argc, char *argv[]) {
 
@@ -34,12 +36,12 @@ int main(int argc, char *argv[]) {
   int c_talkers = 0, c_groups = 0;
   
   talkers = malloc(N * sizeof(Talker));
-  groups = calloc(0, sizeof(Group));
+  groups = malloc(0);
 
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
 
-  mkfifo(pipeNom, fifo_mode);
   mkfifo("auth", fifo_mode);
+  mkfifo(pipeNom, fifo_mode);
 
   do {
     int fd = open(pipeNom, O_RDONLY);
@@ -66,33 +68,13 @@ int main(int argc, char *argv[]) {
       auth(req, talkers, &c_talkers, N);
       
     } else if (strcmp(req.type, "List") == 0) {
-      
-      char pipe_tmp[7], aux[10], envio[100];
-
-      if (c_talkers > 0) {
-        
-        sprintf(aux, "%d", talkers[0].ID);//casting
-        strcpy(envio, aux);
-        for (int i = 1; i < c_talkers;i++) {
-          strcat(envio, ",");
-          sprintf(aux, " %d", talkers[i].ID);//casting
-          strcat(envio, aux);
-        }
-      
+      if (req.c_args == 0) {
+        list(req, talkers, &c_talkers);
+      } else if (req.c_args == 1) {
+        list_group(req, groups, &c_groups);
       } else {
-        
+        perror("solicitud inválida");
       }
-
-      printf("se envia a %s, la info: %s", pipe_tmp, envio);
-      
-      sprintf(pipe_tmp, "pipe%d", req.ID);//casting
-      int fdtemp = open(pipe_tmp, O_WRONLY);
-      
-      if (write(fdtemp, &envio, sizeof(envio)) == 0) {
-        perror("error en la escritura");
-        exit(1);
-      }
-      close(fdtemp);
         
     } else if (strcmp(req.type, "Group") == 0) {
       printf("cccc info: %s\n", req.args);
@@ -109,23 +91,21 @@ int main(int argc, char *argv[]) {
       for (int i = 0;i<c_talkers;i++) {
         if (Ide == talkers[i].ID) { check=1; break;}
       }
-      if (check==0) {
+      if (check) {
+        sprintf(pipe_tmp, "pipe%d", Ide);//casting
+        int fdtemp = open(pipe_tmp, O_WRONLY);
+        sprintf(envio, "\"%s\" desde %d", envio, req.ID);
+        if(write(fdtemp, &envio, sizeof(envio)) == 0) {
+          perror("Error en la escritura");  
+        }
+        //TODO SEÑÑÑÑÑÑAAAAAAAALLLLL
+      } else {
         sprintf(pipe_tmp, "pipe%d", req.ID);//casting
         int fdtemp = open(pipe_tmp, O_WRONLY);
         char env[] = "El ID seleccionado no existe";
         if (write(fdtemp, &env, sizeof(env)) == 0){
           perror("Error en la escritura");
           exit(1);
-        }
-      } else {
-        sprintf(pipe_tmp, "pipe%d", Ide);//casting
-        int fdtemp = open(pipe_tmp, O_WRONLY);
-        sprintf(envio, "\"%s\" desde %d", envio, req.ID);
-        if(write(fdtemp, &envio, sizeof(envio)) == 0) {
-          perror("Error en la escritura");  
-          
-        //TODO SEÑÑÑÑÑÑAAAAAAAALLLLL
-        
         }
       }
       
@@ -139,6 +119,7 @@ int main(int argc, char *argv[]) {
   } while (1);
 
   free(talkers);
+  free(groups);
 
   unlink(pipeNom);
   unlink("auth");
@@ -169,10 +150,20 @@ void validate_args(int argc, char *argv[], int *N, char *pipeNom) {
 
 void auth(Request req, Talker *talkers, int *c_talkers, int N) {
   if (req.c_args != 1) {
-     perror("solicitud inválida");
+    perror("solicitud inválida");
     
   } else if (*c_talkers == N) {
-     perror("Limite de usuarios, intentelo más tarde");
+    char msg[50] = "Error: Límite de usuarios, intentelo más tarde";
+    printf("%s", msg);
+
+    int fd_tmp = open("auth", O_WRONLY);
+
+    if (write(fd_tmp, &msg, sizeof(msg)) == 0) {
+      perror("error en la escritura");
+      exit(1);
+    }
+
+    close(fd_tmp);
     
   } else {
     int exist = 0;
@@ -183,7 +174,7 @@ void auth(Request req, Talker *talkers, int *c_talkers, int N) {
       }
     }
     if (exist) {
-      char msg[40] = "Error: el usuario ya existe";
+      char msg[] = "Error: el usuario ya existe";
 
       int fd_tmp = open("auth", O_WRONLY);
 
@@ -202,7 +193,7 @@ void auth(Request req, Talker *talkers, int *c_talkers, int N) {
 
       (*c_talkers)++;
       
-      char msg[40] = "El usuario se guardo correctamente";
+      char msg[] = "El usuario se guardo correctamente";
 
       int fd_tmp = open("auth", O_WRONLY);
 
@@ -214,4 +205,33 @@ void auth(Request req, Talker *talkers, int *c_talkers, int N) {
       close(fd_tmp);
     }
   }
+}
+
+void list(Request req, Talker *talkers, int *c_talkers) {
+  char pipe_tmp[7], aux[10], envio[100];
+        
+  sprintf(aux, "%d", talkers[0].ID);//casting
+  strcpy(envio, aux);
+  
+  for (int i = 1; i < *c_talkers;i++) {
+    strcat(envio, ",");
+    sprintf(aux, " %d", talkers[i].ID);//casting
+    strcat(envio, aux);
+  }
+
+  printf("se envia a %s, la info: %s", pipe_tmp, envio);
+  
+  sprintf(pipe_tmp, "pipe%d", req.ID);
+  int fdtemp = open(pipe_tmp, O_WRONLY);
+  
+  if (write(fdtemp, &envio, sizeof(envio)) == 0) {
+    perror("error en la escritura");
+    exit(1);
+  }
+  
+  close(fdtemp);
+}
+
+void list_group(Request req, Group *groups, int *c_groups) {
+  
 }

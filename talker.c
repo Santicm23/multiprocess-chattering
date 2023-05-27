@@ -17,30 +17,34 @@
 
 #define max_msg 100
 
-void validate_args(int argc, char *argv[], int *ID, char *pipeNom);
+void validate_args(int argc, char *argv[]);
 int count_words(char *str);
 Request create_req(int ID, char *str);
 int empty(char *str);
 void delete_req(Request req);
-void send_request(char *pipeNom, Request req);
-void auth(char *pipeNom, char* pipeUnit, int ID);
-void list(char *pipeNom, char* pipeUnit, Request req);
-void group(char *pipeNom, Request req);
-void sent(char *pipeNom, Request req);
-void salir(char *pipeNom, char* pipeUnit, Request req);
+void send_request(Request req);
+void auth();
+void list(Request req);
+void group(Request req);
+void sent(Request req);
+void salir(Request req);
+void signalHandler();
+
+int ID;
+char pipeNom[25], pipeUnit[8];
 
 int main(int argc, char *argv[]) {
+  
+  char prompt[200];
 
-  int ID;
-  char pipeNom[25], prompt[200], pipeUnit[8];
-
-
-  validate_args(argc, argv, &ID, pipeNom);
+  validate_args(argc, argv);
 
   // mkfifo(pipeNom, 0666);
   sprintf(pipeUnit, "pipe%d", ID);//casting
 
-  auth(pipeNom, pipeUnit, ID);
+  auth();
+
+  signal(SIGUSR1, &signalHandler);
 
   do {
     Request req;
@@ -61,17 +65,17 @@ int main(int argc, char *argv[]) {
     req = create_req(ID, prompt);
 
     if (strcmp(req.type, "Salir") == 0) {
-      salir(pipeNom, pipeUnit, req);
+      salir(req);
       printf("\nDesconectando del sistema\n\n");
 
     } else if (strcmp(req.type, "List") == 0) {
-      list(pipeNom, pipeUnit, req);
+      list(req);
 
     } else if (strcmp(req.type, "Group") == 0) {
-      group(pipeNom, req);
+      group(req);
 
     } else if (strcmp(req.type, "Sent") == 0) {
-      sent(pipeNom, req);
+      sent(req);
 
     } else {
       printf("El comando no existe\n");
@@ -84,7 +88,7 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-void validate_args(int argc, char *argv[], int *ID, char *pipeNom) {
+void validate_args(int argc, char *argv[]) {
   if (argc != 5) {
     perror("El manager requiere solo dos banderas (-i y -p con sus respectivos "
            "valores)");
@@ -92,7 +96,7 @@ void validate_args(int argc, char *argv[], int *ID, char *pipeNom) {
   } else {
     for (int i = 1; i < argc; i += 2) {
       if (strcmp(argv[i], "-i") == 0) {
-        *ID = atoi(argv[i + 1]);
+        ID = atoi(argv[i + 1]);
 
       } else if (strcmp(argv[i], "-p") == 0) {
 
@@ -106,7 +110,7 @@ void validate_args(int argc, char *argv[], int *ID, char *pipeNom) {
   }
 }
 
-void send_request(char *pipeNom, Request req) {
+void send_request(Request req) {
   int fd = open(pipeNom, O_WRONLY);
 
   if (fd == -1) {
@@ -122,7 +126,7 @@ void send_request(char *pipeNom, Request req) {
   close(fd);
 }
 
-void auth(char *pipeNom, char *pipeUnit, int ID) {
+void auth() {
   Request req;
 
   strcpy(req.type, "Auth");
@@ -132,9 +136,9 @@ void auth(char *pipeNom, char *pipeUnit, int ID) {
 
   sprintf(req.args, "%d", getpid());
 
-  send_request(pipeNom, req);
+  send_request(req);
 
-  char msg[40];
+  char msg[50];
 
   int fd_tmp = open("auth", O_RDONLY);
 
@@ -155,9 +159,9 @@ void auth(char *pipeNom, char *pipeUnit, int ID) {
   mkfifo(pipeUnit, fifo_mode);
 }
 
-void list(char *pipeNom, char *pipeUnit, Request req) {
+void list(Request req) {
   char recibo[100];
-  send_request(pipeNom, req);
+  send_request(req);
   
   int fdtemp = open(pipeUnit, O_RDONLY);
 
@@ -171,12 +175,12 @@ void list(char *pipeNom, char *pipeUnit, Request req) {
   close(fdtemp);
 }
 
-void group(char *pipeNom, Request req) { send_request(pipeNom, req); }
+void group(Request req) { send_request(req); }
 
-void sent(char *pipeNom, Request req) { send_request(pipeNom, req); }
+void sent(Request req) { send_request(req); }
 
-void salir(char *pipeNom, char* pipeUnit, Request req) {
-  send_request(pipeNom, req);
+void salir(Request req) {
+  send_request(req);
   unlink(pipeUnit);
 }
 
@@ -216,4 +220,8 @@ Request create_req(int ID, char *str) {
   }
 
   return req;
+}
+
+void signalHandler() {
+  
 }
