@@ -90,7 +90,13 @@ int main(int argc, char *argv[]) {
       }
 
     } else if (strcmp(req.type, "Sent") == 0) {
-      sent(req);
+      if (!match("\"([[ 0-9a-zA-ZÀ-ÿñÑ_():<>!?¿¡;,.+*-°|%$]|-)*\" G?([0-9]+)",
+                 req.args)) {
+        printf("El comando Sent debe tener un mensaje entre comillas y un id "
+               "(de grupo o normal)\n");
+      } else {
+        sent(req);
+      }
 
     } else {
       printf("El comando no existe\n");

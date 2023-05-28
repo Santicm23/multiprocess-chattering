@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <regex.h>
 
 #include "structures.h"
 
@@ -27,6 +28,8 @@ void sent(Request req);
 void group(Request req);
 char status_t(int ID);
 int pidTalker(int ID);
+void sent_group(Request req);
+int match(char *regex, char *str);
 
 int N;
 char pipeNom[25];
@@ -86,8 +89,25 @@ int main(int argc, char *argv[]) {
         
     } else if (strcmp(req.type, "Group") == 0) {
       group(req);
+      
     } else if (strcmp(req.type, "Sent") == 0) {
-      sent(req);
+      char tmp[max_res];
+      strcpy(tmp, req.args);
+      
+      char *token;
+      token = strtok(tmp, "\"");
+      printf("'%s'\n", token);
+      token = strtok(NULL, " ");
+      printf("'%s'\n", token);
+      
+      if (match("^([0-9]+)", token)) {
+        printf("entraa no G\n");
+        sent(req);
+      
+      } else {
+        printf("entraa G\n");
+        sent_group(req);
+      }
       
     } else if (strcmp(req.type, "Salir") == 0) {
       for (int i = 0; i < c_talkers; i++) {
@@ -205,8 +225,11 @@ void list(Request req) {
   
   for (int i = 0; i < c_talkers; i++) {
     if (talkers[i].conectado) {
-      if (primero) primero = 0;
-      else strcat(envio, ", ");
+      if (primero) {
+        primero = 0;
+      } else {
+        strcat(envio, ", ");
+      }
       sprintf(aux, "%d", talkers[i].ID);//casting
       strcat(envio, aux);
     }
@@ -234,8 +257,11 @@ void list_group(Request req) {
   int primero = 1;
   if (g < c_groups) {  
     for (int i = 0; i < groups[g].c_talkers; i++) {
-      if (primero) { primero = 0; }
-      else { strcat(envio, ", "); }
+      if (primero) {
+        primero = 0;
+      } else {
+        strcat(envio, ", ");
+      }
     
       sprintf(aux, "%d", groups[g].ID_talkers[i]);//casting
       strcat(envio, aux);
@@ -258,69 +284,18 @@ void list_group(Request req) {
     
 }
 
-void sent(Request req) {
-  int check = 0;
-  char pipe_tmp[7], res[150];
-  char *envio = strtok(req.args, "\"");
-  char *id_dest = strtok(NULL, " ");
-  
-  int pidDest;
-  int Ide = atoi(id_dest);
-  
-  for (int i = 0; i < c_talkers; i++) {
-    if (Ide == talkers[i].ID && talkers[i].conectado) {
-      pidDest = talkers[i].pid;
-      check = 1;
-      break;
-    }
-  }
-  if (check) {
-    sprintf(pipe_tmp, "pipe%d", Ide);//casting
-    
-    if (kill(pidDest, SIGUSR1)) {
-      perror("Error mandando la señal");
-    } else {
-      printf("\nse le notifico al talker\n\n");
-    }
-    
-    sprintf(res, "\"%s\" desde %d", envio, req.ID);
-    
-    int fd_tmp = open(pipe_tmp, O_WRONLY);
-    
-    if (write(fd_tmp, &res, sizeof(res)) == 0) {
-      perror("Error en la escritura");
-    }
-    
-    close(fd_tmp);
-    
-  } else {
-    sprintf(pipe_tmp, "pipe%d", req.ID);//casting
-    int fd_tmp = open(pipe_tmp, O_WRONLY);
-    
-    char env[] = "El ID seleccionado no existe";
-    if (write(fd_tmp, &env, sizeof(env)) == 0){
-      perror("Error en la escritura");
-      exit(1);
-    }
-
-    close(fd_tmp);
-  }
-}
-
 void group(Request req) {
   int *contenedor;
   char res;
   contenedor = malloc(req.c_args * sizeof(int)); 
 
   contenedor[0] = atoi(strtok(req.args, ", "));
-  printf(" %d", contenedor[0]);
   res = status_t(contenedor[0]);
   if (res == 'n') {
     printf("El usuario %d no existe\n", contenedor[0]);
   } else {
     for(int i = 1; i < req.c_args; i++) {
       contenedor[i] = atoi(strtok(NULL, ", "));
-      printf(" %d", contenedor[i]);
       res = status_t(contenedor[i]);
       if (res == 'n') {
         printf("El usuario %d no existe\n", contenedor[0]);
@@ -357,21 +332,24 @@ void group(Request req) {
 
       char tmp[4];
 
-      if (primero) { primero = 0; }
-      else { strcat(devolucion, ", "); }
+      if (primero) {
+        primero = 0;
+      } else {
+        strcat(devolucion, ", ");
+      }
       
       sprintf(tmp, "%d", contenedor[i]);
       strcat(devolucion, tmp);
 
       sprintf(pipe_tmp, "pipe%d", contenedor[i]);
-      int fd_temp = open(pipe_tmp, O_WRONLY);
+      int fd_tmp = open(pipe_tmp, O_WRONLY);
       
-      if (write(fd_temp, &mensaje, sizeof(mensaje)) == 0) {
+      if (write(fd_tmp, &mensaje, sizeof(mensaje)) == 0) {
         perror("Error en la escritura");
         exit(1);
       }
       
-      close(fd_temp);
+      close(fd_tmp);
     }
     groups[c_groups].ID_talkers[req.c_args] = req.ID;
     groups[c_groups].c_talkers++;
@@ -380,26 +358,170 @@ void group(Request req) {
     strcat(devolucion, tmp);
 
     sprintf(pipe_tmp, "pipe%d", req.ID);
-    int fd_temp = open(pipe_tmp,O_WRONLY);
-    if (write(fd_temp, &devolucion, sizeof(devolucion)) == 0) {
+    int fd_tmp = open(pipe_tmp,O_WRONLY);
+    if (write(fd_tmp, &devolucion, sizeof(devolucion)) == 0) {
         perror("Error en la escritura");
         exit(1);
     }
-    close(fd_temp);
+    close(fd_tmp);
+    
     c_groups++;
     
   } else {
-
-    perror("Alguno de los IDs ingresados no esta registrado");
-
-    char *devolucion = "Alguno de los IDs ingresados no esta registrado";
+    char devolucion[max_res] = "Alguno de los IDs ingresados no esta registrado";
     char pipe_tmp[7];
     sprintf(pipe_tmp, "pipe%d", req.ID);
-    int fd_temp = open(pipe_tmp,O_WRONLY);
-    if (write(fd_temp, &devolucion, sizeof(devolucion)) == 0) {
+    int fd_tmp = open(pipe_tmp,O_WRONLY);
+    if (write(fd_tmp, &devolucion, sizeof(devolucion)) == 0) {
       perror("Error en la escritura");
       exit(1);
     }
+    close(fd_tmp);
+  }
+}
+
+void sent(Request req) {
+  int check = 0;
+  char pipe_tmp[7], res[150];
+  char *envio = strtok(req.args, "\"");
+  char *id_dest = strtok(NULL, " ");
+  
+  int pidDest;
+  int Ide = atoi(id_dest);
+  
+  for (int i = 0; i < c_talkers; i++) {
+    if (Ide == talkers[i].ID && talkers[i].conectado) {
+      pidDest = talkers[i].pid;
+      check = 1;
+      break;
+    }
+  }  
+  if (check) {
+    sprintf(pipe_tmp, "pipe%d", Ide);//casting
+    
+    if (kill(pidDest, SIGUSR1)) {
+      perror("Error mandando la señal");
+    } else {
+      printf("\nse le notifico al talker\n\n");
+    }
+    
+    sprintf(res, "\"%s\" desde %d", envio, req.ID);
+    
+    int fd_tmp = open(pipe_tmp, O_WRONLY);
+    
+    if (write(fd_tmp, &res, sizeof(res)) == 0) {
+      perror("Error en la escritura");
+    }
+    
+    close(fd_tmp);
+    
+  } else {
+    sprintf(pipe_tmp, "pipe%d", req.ID);//casting
+    int fd_tmp = open(pipe_tmp, O_WRONLY);
+    
+    char env[] = "El ID seleccionado no existe";
+    if (write(fd_tmp, &env, sizeof(env)) == 0){
+      perror("Error en la escritura");
+      exit(1);
+    }
+
+    close(fd_tmp);
+  }
+}
+
+void sent_group(Request req) {
+
+  char pipe_tmp[7], res[max_res];
+
+  char *envio = strtok(req.args, "\"");
+  char *g = strtok(NULL," G");
+  int dir = atoi(g);
+  int pidtmp;
+  
+
+  
+  if (dir >= c_groups) {
+    char error[max_res];
+    sprintf(error, "Error: El grupo 'G%d' no existe ", dir);
+    
+    int pid_tmp = pidTalker(req.ID);
+
+    if (kill(pid_tmp, SIGUSR1)) {
+      perror("Error mandando la señal");
+    } else {
+      printf("\nse le notifico al talker\n\n");
+    }
+
+    sprintf(pipe_tmp, "pipe%d", req.ID);
+    int fd_tmp = open(pipe_tmp, O_WRONLY);
+  
+    if (write(fd_tmp, &error, sizeof(error)) == 0) {
+      perror("Error en la escritura");
+      exit(1);
+
+    }
+    close(fd_tmp);
+    return;
+    
+  }
+  strcat(envio, " desde G");
+
+  sprintf(res, "%s%d", envio, dir);
+  
+  int check = 0;
+
+  for (int i = 0; i < c_talkers; i++){
+    if (groups[dir].ID_talkers[i] == req.ID){
+      check = 1;
+      break;
+    }
+  }
+  
+  if (check) {
+    for (int i = 0; i < groups[dir].c_talkers; i++) {
+      if (status_t(groups[dir].ID_talkers[i]) == 'c' && req.ID != groups[dir].ID_talkers[i]) {
+  
+        pidtmp = pidTalker(groups[dir].ID_talkers[i]);
+  
+        if (kill(pidtmp, SIGUSR1)) {
+          perror("Error mandando la señal");
+        } else {
+          printf("\nse le notifico al talker\n\n");
+        }
+  
+        sprintf(pipe_tmp, "pipe%d", groups[dir].ID_talkers[i]);
+        
+        int fd_tmp = open(pipe_tmp, O_WRONLY);
+  
+        if (write(fd_tmp, &res, sizeof(res)) == 0) {
+          perror("Error en la escritura");
+          exit(1);
+        }
+        
+        close(fd_tmp);
+      }
+    }
+  } else {
+    char error[max_res];
+
+    sprintf(error, "Error: No perteneces el grupo 'G%d'", dir);
+    
+    int pid_tmp = pidTalker(req.ID);
+
+    if (kill(pid_tmp, SIGUSR1)) {
+      perror("Error mandando la señal");
+    } else {
+      printf("\nse le notifico al talker\n\n");
+    }
+
+    sprintf(pipe_tmp, "pipe%d", req.ID);
+    int fd_tmp = open(pipe_tmp, O_WRONLY);
+  
+    if (write(fd_tmp, &error, sizeof(error)) == 0) {
+      perror("Error en la escritura");
+      exit(1);
+    }
+    close(fd_tmp);
   }
 }
 
@@ -435,5 +557,19 @@ char status_t(int ID) {
       return 'e';
   } else {
     return 'n';
+  }
+}
+
+int match(char *regex, char *str) {
+  regex_t r;
+  if (regcomp(&r, regex, REG_EXTENDED) != 0) {
+    perror("Error al compilar el regex");
+    exit(EXIT_FAILURE);
+  }
+  if (regexec(&r, str, 0, NULL, 0) == 0) {
+    regfree(&r);
+    return 1;
+  } else {
+    return 0;
   }
 }
