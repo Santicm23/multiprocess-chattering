@@ -5,6 +5,7 @@
 */
 
 #include <fcntl.h>
+#include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,19 +30,20 @@ void list(Request req);
 void group(Request req);
 void sent(Request req);
 void salir(Request req);
+int match(char *regex, char *str);
 void signalHandler();
 
 int ID;
 char pipeNom[25], pipeUnit[8];
 
 int main(int argc, char *argv[]) {
-  
+
   char prompt[200];
 
   validate_args(argc, argv);
 
   // mkfifo(pipeNom, 0666);
-  sprintf(pipeUnit, "pipe%d", ID);//casting
+  sprintf(pipeUnit, "pipe%d", ID); // casting
 
   auth();
 
@@ -70,10 +72,22 @@ int main(int argc, char *argv[]) {
       printf("\nDesconectando del sistema\n\n");
 
     } else if (strcmp(req.type, "List") == 0) {
-      list(req);
+      if (req.c_args != 0 && req.c_args != 1)
+        printf("El comando 'List' solo puede tener 0 o 1 argumentos\n");
+      else
+        list(req);
 
     } else if (strcmp(req.type, "Group") == 0) {
-      group(req);
+      if (req.c_args == 0) {
+        printf("El comando 'Group' necesita mínimo un argumento\n");
+
+      } else if (!match("^([0-9]+)(, [0-9]+)*", req.args)) {
+        printf("Los argumentos del comando 'Group' deben ser enteros separados "
+               "por coma y espacio (', ')\n");
+
+      } else {
+        group(req);
+      }
 
     } else if (strcmp(req.type, "Sent") == 0) {
       sent(req);
@@ -151,7 +165,7 @@ void auth() {
   close(fd_tmp);
 
   printf("\n%s\n\n", msg);
-  
+
   if (strcmp("Error", strtok(msg, ":")) == 0) {
     exit(EXIT_FAILURE);
   }
@@ -163,7 +177,7 @@ void auth() {
 void list(Request req) {
   char recibo[max_msg];
   send_request(req);
-  
+
   int fd_tmp = open(pipeUnit, O_RDONLY);
 
   if (read(fd_tmp, &recibo, sizeof(recibo)) == -1) {
@@ -173,7 +187,7 @@ void list(Request req) {
 
   if (strcmp("Error", strtok(recibo, ":")) == 0) {
     printf("%s: El grupo no existe\n", recibo);
-    
+
   } else {
     printf("Los usuarios conectados en el sistema son %s\n", recibo);
   }
@@ -183,7 +197,7 @@ void list(Request req) {
 void group(Request req) {
   char recibo[max_msg];
   send_request(req);
-  
+
   int fd_tmp = open(pipeUnit, O_RDONLY);
 
   if (read(fd_tmp, &recibo, sizeof(recibo)) == -1) {
@@ -191,13 +205,11 @@ void group(Request req) {
     exit(EXIT_FAILURE);
   }
   printf("%s\n", recibo);
-  
+
   close(fd_tmp);
 }
 
-void sent(Request req) {
-  send_request(req);
-}
+void sent(Request req) { send_request(req); }
 
 void salir(Request req) {
   send_request(req);
@@ -237,14 +249,29 @@ Request create_req(int ID, char *str) {
   if (req.c_args > 0) {
     token = strtok(NULL, "\0");
     strcpy(req.args, token);
+    strcat(req.args, "\0");
   }
 
   return req;
 }
 
+int match(char *regex, char *str) {
+  regex_t r;
+  if (regcomp(&r, regex, REG_EXTENDED) != 0) {
+    perror("Error al compilar el regex");
+    exit(EXIT_FAILURE);
+  }
+  if (regexec(&r, str, 0, NULL, 0) == 0) {
+    regfree(&r);
+    return 1;
+  } else {
+    return 0;
+  }
+}
+
 void signalHandler() {
   char recibo[max_res];
-  
+
   int fd_tmp = open(pipeUnit, O_RDONLY);
 
   if (read(fd_tmp, &recibo, sizeof(recibo)) == -1) {
@@ -253,6 +280,6 @@ void signalHandler() {
   }
 
   close(fd_tmp);
-  
+
   printf("\n--> %s\n", recibo);
 }

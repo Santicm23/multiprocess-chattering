@@ -77,13 +77,12 @@ int main(int argc, char *argv[]) {
       auth(req);
       
     } else if (strcmp(req.type, "List") == 0) {
-      if (req.c_args == 0) {
+      if (req.c_args == 0)
         list(req);
-      } else if (req.c_args == 1) {
+      else if (req.c_args == 1)
         list_group(req);
-      } else {
-        perror("solicitud inválida");
-      }
+      else
+        perror("solicitud inválida (List)");
         
     } else if (strcmp(req.type, "Group") == 0) {
       group(req);
@@ -99,7 +98,7 @@ int main(int argc, char *argv[]) {
       c_talkers_conectados--;
       
     } else {
-      printf("llego una solicitud inválida\n");
+      perror("llego una solicitud inválida\n");
     }
 
     close(fd);
@@ -138,7 +137,7 @@ void validate_args(int argc, char *argv[]) {
 
 void auth(Request req) {
   if (req.c_args != 1) {
-    perror("solicitud inválida");
+    perror("solicitud inválida (auth)");
     
   } else if (c_talkers_conectados == N) {
     char msg[50] = "Error: Límite de usuarios, intentelo más tarde";
