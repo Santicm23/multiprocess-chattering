@@ -15,28 +15,36 @@
 
 #include "structures.h"
 
-void validate_args(int argc, char *argv[], int *N, char *pipeNom);
-void auth(Request req, Talker *talkers, int *c_talkers, int N);
-void list(Request req, Talker *talkers, int c_talkers);
-void list_group(Request req, Group *groups, int c_groups);
-void sent(Request req, Talker *talkers, int c_talkers);
+
+#define max_res 200
+
+
+void validate_args(int argc, char *argv[]);
+void auth(Request req);
+void list(Request req);
+void list_group(Request req);
+void sent(Request req);
+void group(Request req);
+char status_t(int ID);
+int pidTalker(int ID);
+
+int N;
+char pipeNom[25];
+
+Talker *talkers;
+Group *groups;
+
+int c_talkers = 0, c_talkers_conectados = 0, c_groups = 0;
 
 int main(int argc, char *argv[]) {
 
-  int N;
-  char pipeNom[25];
-
-  validate_args(argc, argv, &N, pipeNom);
+  validate_args(argc, argv);
 
   printf("\nManager iniciado con un número máximo de %d usuarios y '%s' como "
          "nombre del pipe pricipal \n\n",
          N, pipeNom);
-
-  Talker *talkers;
-  Group *groups;
-  int c_talkers = 0, c_groups = 0;
   
-  talkers = malloc(N * sizeof(Talker));
+  talkers = malloc(0);
   groups = malloc(0);
 
   mode_t fifo_mode = S_IRUSR | S_IWUSR;
@@ -66,24 +74,30 @@ int main(int argc, char *argv[]) {
     printf("cant_args: %d\n", req.c_args);
 
     if (strcmp(req.type, "Auth") == 0) {
-      auth(req, talkers, &c_talkers, N);
+      auth(req);
       
     } else if (strcmp(req.type, "List") == 0) {
       if (req.c_args == 0) {
-        list(req, talkers, c_talkers);
+        list(req);
       } else if (req.c_args == 1) {
-        list_group(req, groups, c_groups);
+        list_group(req);
       } else {
         perror("solicitud inválida");
       }
         
     } else if (strcmp(req.type, "Group") == 0) {
-      printf("cccc info: %s\n", req.args);
+      group(req);
     } else if (strcmp(req.type, "Sent") == 0) {
-      sent(req, talkers, c_talkers);
+      sent(req);
       
     } else if (strcmp(req.type, "Salir") == 0) {
-      printf("eeee info: %s\n", req.args);
+      for (int i = 0; i < c_talkers; i++) {
+        if (req.ID == talkers[i].ID){
+          talkers[i].conectado = 0;
+        }
+      }
+      c_talkers_conectados--;
+      
     } else {
       printf("llego una solicitud inválida\n");
     }
@@ -101,7 +115,7 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-void validate_args(int argc, char *argv[], int *N, char *pipeNom) {
+void validate_args(int argc, char *argv[]) {
   if (argc != 5) {
     perror("El manager requiere solo dos banderas (-n y -p con sus respectivos "
            "valores)");
@@ -109,7 +123,7 @@ void validate_args(int argc, char *argv[], int *N, char *pipeNom) {
   } else {
     for (int i = 1; i < argc; i += 2) {
       if (strcmp(argv[i], "-n") == 0) {
-        *N = atoi(argv[i + 1]);
+        N = atoi(argv[i + 1]);
 
       } else if (strcmp(argv[i], "-p") == 0) {
         strcpy(pipeNom, argv[i + 1]);
@@ -122,11 +136,11 @@ void validate_args(int argc, char *argv[], int *N, char *pipeNom) {
   }
 }
 
-void auth(Request req, Talker *talkers, int *c_talkers, int N) {
+void auth(Request req) {
   if (req.c_args != 1) {
     perror("solicitud inválida");
     
-  } else if (*c_talkers == N) {
+  } else if (c_talkers_conectados == N) {
     char msg[50] = "Error: Límite de usuarios, intentelo más tarde";
     printf("%s", msg);
 
@@ -140,15 +154,15 @@ void auth(Request req, Talker *talkers, int *c_talkers, int N) {
     close(fd_tmp);
     
   } else {
-    int exist = 0;
-    for (int i = 0; i < *c_talkers;i++) {
-      if (req.ID == talkers[i].ID) {
-        exist = 1;
+    int conected = 0;
+    for (int i = 0; i < c_talkers; i++) {
+      if (req.ID == talkers[i].ID && talkers[i].conectado) {
+        conected = 1;
         break;
       }
     }
-    if (exist) {
-      char msg[] = "Error: el usuario ya existe";
+    if (conected) {
+      char msg[] = "Error: el usuario ya esta conectado";
 
       int fd_tmp = open("auth", O_WRONLY);
 
@@ -162,11 +176,15 @@ void auth(Request req, Talker *talkers, int *c_talkers, int N) {
     } else {
       char* token = strtok(req.args, " ");
       
-      talkers[*c_talkers].ID = req.ID;
-      talkers[*c_talkers].pid = atoi(token);
-
-      (*c_talkers)++;
+      talkers = realloc(talkers, (c_talkers+1) * sizeof(Talker));
       
+      talkers[c_talkers].ID = req.ID;
+      talkers[c_talkers].pid = atoi(token);
+      talkers[c_talkers].conectado = 1;
+      
+      c_talkers++;
+      c_talkers_conectados++;
+
       char msg[] = "El usuario se guardo correctamente";
 
       int fd_tmp = open("auth", O_WRONLY);
@@ -181,16 +199,18 @@ void auth(Request req, Talker *talkers, int *c_talkers, int N) {
   }
 }
 
-void list(Request req, Talker *talkers, int c_talkers) {
-  char pipe_tmp[7], aux[10], envio[100];
-        
-  sprintf(aux, "%d", talkers[0].ID);//casting
-  strcpy(envio, aux);
+void list(Request req) {
+  char pipe_tmp[7], aux[10], envio[max_res] = "";
+
+  int primero = 1;
   
-  for (int i = 1; i < c_talkers;i++) {
-    strcat(envio, ",");
-    sprintf(aux, " %d", talkers[i].ID);//casting
-    strcat(envio, aux);
+  for (int i = 0; i < c_talkers; i++) {
+    if (talkers[i].conectado) {
+      if (primero) primero = 0;
+      else strcat(envio, ", ");
+      sprintf(aux, "%d", talkers[i].ID);//casting
+      strcat(envio, aux);
+    }
   }
 
   printf("se envia a %s, la info: %s", pipe_tmp, envio);
@@ -206,11 +226,40 @@ void list(Request req, Talker *talkers, int c_talkers) {
   close(fdtemp);
 }
 
-void list_group(Request req, Group *groups, int c_groups) {
+void list_group(Request req) {
   
+  int g = atoi(req.args + 1);
+
+  char pipe_tmp[7], aux[10], envio[max_res] = "";
+
+  int primero = 1;
+  if (g < c_groups) {  
+    for (int i = 0; i < groups[g].c_talkers; i++) {
+      if (primero) { primero = 0; }
+      else { strcat(envio, ", "); }
+    
+      sprintf(aux, "%d", groups[g].ID_talkers[i]);//casting
+      strcat(envio, aux);
+    }
+  } else {
+    strcat(envio, "Error:");
+  }
+  
+  printf("se envia a %s, la info: %s", pipe_tmp, envio);
+  
+  sprintf(pipe_tmp, "pipe%d", req.ID);
+  int fdtemp = open(pipe_tmp, O_WRONLY);
+  
+  if (write(fdtemp, &envio, sizeof(envio)) == 0) {
+    perror("error en la escritura");
+    exit(1);
+  }
+  
+  close(fdtemp);
+    
 }
 
-void sent(Request req, Talker *talkers, int c_talkers) {
+void sent(Request req) {
   int check = 0;
   char pipe_tmp[7], res[150];
   char *envio = strtok(req.args, "\"");
@@ -220,14 +269,13 @@ void sent(Request req, Talker *talkers, int c_talkers) {
   int Ide = atoi(id_dest);
   
   for (int i = 0; i < c_talkers; i++) {
-    if (Ide == talkers[i].ID) {
+    if (Ide == talkers[i].ID && talkers[i].conectado) {
       pidDest = talkers[i].pid;
       check = 1;
       break;
     }
   }
   if (check) {
-    printf("existeeee\n");
     sprintf(pipe_tmp, "pipe%d", Ide);//casting
     
     if (kill(pidDest, SIGUSR1)) {
@@ -257,5 +305,136 @@ void sent(Request req, Talker *talkers, int c_talkers) {
     }
 
     close(fd_tmp);
+  }
+}
+
+void group(Request req) {
+  int *contenedor;
+  char res;
+  contenedor = malloc(req.c_args * sizeof(int)); 
+
+  contenedor[0] = atoi(strtok(req.args, ", "));
+  printf(" %d", contenedor[0]);
+  res = status_t(contenedor[0]);
+  if (res == 'n') {
+    printf("El usuario %d no existe\n", contenedor[0]);
+  } else {
+    for(int i = 1; i < req.c_args; i++) {
+      contenedor[i] = atoi(strtok(NULL, ", "));
+      printf(" %d", contenedor[i]);
+      res = status_t(contenedor[i]);
+      if (res == 'n') {
+        printf("El usuario %d no existe\n", contenedor[0]);
+        break;
+      }
+    }
+    
+  }
+  //---------------------------------------------------------------------/
+  if (res != 'n') {
+    groups = realloc(groups, (c_groups + 1) * sizeof(Group));
+    groups[c_groups].ID = c_groups;
+    groups[c_groups].c_talkers = req.c_args;
+    groups[c_groups].ID_talkers = malloc((req.c_args + 1) * sizeof(int));
+
+    int pidtemp;
+    char devolucion[max_res], pipe_tmp[7];
+    sprintf(devolucion, "Se ha creado el grupo G%d con los talkers ", c_groups);
+
+    int primero = 1;
+    
+    for (int i = 0; i < req.c_args; i++) {
+      char mensaje[max_res];
+      sprintf(mensaje, "Ahora perteneces al grupo G%d", c_groups);
+      
+      groups[c_groups].ID_talkers[i] = contenedor[i];
+      pidtemp = pidTalker(contenedor[i]);
+      
+      if (kill(pidtemp, SIGUSR1)) {
+        perror("Error mandando la señal");        
+      } else {
+        printf("\nse le notifico al talker\n\n");
+      }
+
+      char tmp[4];
+
+      if (primero) { primero = 0; }
+      else { strcat(devolucion, ", "); }
+      
+      sprintf(tmp, "%d", contenedor[i]);
+      strcat(devolucion, tmp);
+
+      sprintf(pipe_tmp, "pipe%d", contenedor[i]);
+      int fd_temp = open(pipe_tmp, O_WRONLY);
+      
+      if (write(fd_temp, &mensaje, sizeof(mensaje)) == 0) {
+        perror("Error en la escritura");
+        exit(1);
+      }
+      
+      close(fd_temp);
+    }
+    groups[c_groups].ID_talkers[req.c_args] = req.ID;
+    groups[c_groups].c_talkers++;
+    char tmp[8];
+    sprintf(tmp, " y %d", req.ID);
+    strcat(devolucion, tmp);
+
+    sprintf(pipe_tmp, "pipe%d", req.ID);
+    int fd_temp = open(pipe_tmp,O_WRONLY);
+    if (write(fd_temp, &devolucion, sizeof(devolucion)) == 0) {
+        perror("Error en la escritura");
+        exit(1);
+    }
+    close(fd_temp);
+    c_groups++;
+    
+  } else {
+
+    perror("Alguno de los IDs ingresados no esta registrado");
+
+    char *devolucion = "Alguno de los IDs ingresados no esta registrado";
+    char pipe_tmp[7];
+    sprintf(pipe_tmp, "pipe%d", req.ID);
+    int fd_temp = open(pipe_tmp,O_WRONLY);
+    if (write(fd_temp, &devolucion, sizeof(devolucion)) == 0) {
+      perror("Error en la escritura");
+      exit(1);
+    }
+  }
+}
+
+int pidTalker(int ID) {
+  int pidDest = -1;
+  
+  for (int i = 0; i < c_talkers; i++) {
+    if (ID == talkers[i].ID && talkers[i].conectado) {
+      pidDest = talkers[i].pid;
+      break;
+    }
+  }
+  
+  return pidDest;
+}
+
+// n: si no existe, e: si existe y no esta conectado, y c: si existe y esta conectado
+char status_t(int ID) {
+
+  int valor = 0, lugar;
+  for (int i = 0; i < c_talkers; i++) {
+    if (talkers[i].ID == ID) {
+      valor = 1;
+      lugar = i;
+      break;
+    }
+  }
+
+  if (valor == 1) {
+    if (talkers[lugar].conectado == 1)
+      return 'c';
+    else
+      return 'e';
+  } else {
+    return 'n';
   }
 }

@@ -16,6 +16,7 @@
 #include "structures.h"
 
 #define max_msg 100
+#define max_res 200
 
 void validate_args(int argc, char *argv[]);
 int count_words(char *str);
@@ -160,7 +161,7 @@ void auth() {
 }
 
 void list(Request req) {
-  char recibo[100];
+  char recibo[max_msg];
   send_request(req);
   
   int fd_tmp = open(pipeUnit, O_RDONLY);
@@ -170,13 +171,33 @@ void list(Request req) {
     exit(EXIT_FAILURE);
   }
 
-  printf("Los usuarios conectados en el sistema son %s\n", recibo);
+  if (strcmp("Error", strtok(recibo, ":")) == 0) {
+    printf("%s: El grupo no existe\n", recibo);
+    
+  } else {
+    printf("Los usuarios conectados en el sistema son %s\n", recibo);
+  }
   close(fd_tmp);
 }
 
-void group(Request req) { send_request(req); }
+void group(Request req) {
+  char recibo[max_msg];
+  send_request(req);
+  
+  int fd_tmp = open(pipeUnit, O_RDONLY);
 
-void sent(Request req) { send_request(req); }
+  if (read(fd_tmp, &recibo, sizeof(recibo)) == -1) {
+    perror("Error lectura");
+    exit(EXIT_FAILURE);
+  }
+  printf("%s\n", recibo);
+  
+  close(fd_tmp);
+}
+
+void sent(Request req) {
+  send_request(req);
+}
 
 void salir(Request req) {
   send_request(req);
@@ -222,7 +243,7 @@ Request create_req(int ID, char *str) {
 }
 
 void signalHandler() {
-  char recibo[150];
+  char recibo[max_res];
   
   int fd_tmp = open(pipeUnit, O_RDONLY);
 

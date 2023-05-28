@@ -8,9 +8,11 @@ typedef struct Request {
 typedef struct Group {
   int ID;
   int *ID_talkers;
+  int c_talkers;
 } Group;
 
 typedef struct Talker {
   int ID;
   int pid;
+  int conectado;
 } Talker;
