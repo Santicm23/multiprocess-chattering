@@ -101,11 +101,9 @@ int main(int argc, char *argv[]) {
       printf("'%s'\n", token);
       
       if (match("^([0-9]+)", token)) {
-        printf("entraa no G\n");
         sent(req);
       
       } else {
-        printf("entraa G\n");
         sent_group(req);
       }
       
@@ -219,7 +217,7 @@ void auth(Request req) {
 }
 
 void list(Request req) {
-  char pipe_tmp[7], aux[10], envio[max_res] = "";
+  char pipe_tmp[7], aux[10], envio[max_res] = "Los usuarios conectados en el sistema son ";
 
   int primero = 1;
   
@@ -252,7 +250,7 @@ void list_group(Request req) {
   
   int g = atoi(req.args + 1);
 
-  char pipe_tmp[7], aux[10], envio[max_res] = "";
+  char pipe_tmp[7], aux[10], envio[max_res] = "Los usuarios del grupo son ";
 
   int primero = 1;
   if (g < c_groups) {  
@@ -267,7 +265,7 @@ void list_group(Request req) {
       strcat(envio, aux);
     }
   } else {
-    strcat(envio, "Error:");
+    strcpy(envio, "Error:");
   }
   
   printf("se envia a %s, la info: %s", pipe_tmp, envio);
@@ -416,6 +414,15 @@ void sent(Request req) {
     close(fd_tmp);
     
   } else {
+    
+    int pid_tmp = pidTalker(req.ID);
+
+    if (kill(pid_tmp, SIGUSR1)) {
+      perror("Error mandando la señal");
+    } else {
+      printf("\nse le notifico al talker\n\n");
+    }
+    
     sprintf(pipe_tmp, "pipe%d", req.ID);//casting
     int fd_tmp = open(pipe_tmp, O_WRONLY);
     
@@ -437,8 +444,6 @@ void sent_group(Request req) {
   char *g = strtok(NULL," G");
   int dir = atoi(g);
   int pidtmp;
-  
-
   
   if (dir >= c_groups) {
     char error[max_res];
@@ -466,7 +471,7 @@ void sent_group(Request req) {
   }
   strcat(envio, " desde G");
 
-  sprintf(res, "%s%d", envio, dir);
+  sprintf(res, "\"%s%d\"", envio, dir);
   
   int check = 0;
 

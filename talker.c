@@ -81,7 +81,7 @@ int main(int argc, char *argv[]) {
       if (req.c_args == 0) {
         printf("El comando 'Group' necesita mínimo un argumento\n");
 
-      } else if (!match("^([0-9]+)(, [0-9]+)*", req.args)) {
+      } else if (!match("^(([0-9]+)(, [0-9]+)*)$", req.args)) {
         printf("Los argumentos del comando 'Group' deben ser enteros separados "
                "por coma y espacio (', ')\n");
 
@@ -90,8 +90,9 @@ int main(int argc, char *argv[]) {
       }
 
     } else if (strcmp(req.type, "Sent") == 0) {
-      if (!match("\"([[ 0-9a-zA-ZÀ-ÿñÑ_():<>!?¿¡;,.+*-°|%$]|-)*\" G?([0-9]+)",
-                 req.args)) {
+      if (!match(
+              "^(\"([[ 0-9a-zA-ZÀ-ÿñÑ_():<>!?¿¡;,.+*-°|%$]|-)*\" G?([0-9]+))$",
+              req.args)) {
         printf("El comando Sent debe tener un mensaje entre comillas y un id "
                "(de grupo o normal)\n");
       } else {
@@ -195,7 +196,7 @@ void list(Request req) {
     printf("%s: El grupo no existe\n", recibo);
 
   } else {
-    printf("Los usuarios conectados en el sistema son %s\n", recibo);
+    printf("%s\n", recibo);
   }
   close(fd_tmp);
 }
